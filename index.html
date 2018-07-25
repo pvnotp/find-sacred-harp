@@ -22,7 +22,6 @@ Enter your zipcode: <input id="input" type="text" class="input"></input><br>
 <form name="menu">
 	Find events within: <input type="text" name="miles" value="50" class="input"> miles<br>
 	Occuring within: <input type="text" name="months" value="6" class="input"> months<br>
-	(<input type="checkbox" id="past" size="5" class="input">Show past singings)<br>
 </form>
 </div>
 <button id="button">Find Singings</button>
@@ -40,10 +39,9 @@ Sorry, no singings meet those criteria.
 <div id="singings">
 </div>
 
-
 <!-- About page / Map -->
 <div id="footer">
-<center><a href="about.html">About</a></center>
+<a href="about.html">About</a>
 </div>
 
 </div>
@@ -64,20 +62,25 @@ var notfound = document.getElementById("notfound");
 var nosingings = document.getElementById("nosingings");
 
 
+<!-- make zipcode a number for android devices -->
 if (navigator.userAgent.toLowerCase().indexOf("android") > -1) {
   zi.type = "number";
 }
 
+<!-- submit function passes zipcode to load_singings -->
 function submit() {
   zi.value = zi.value.replace(/^\s+|\s+$/g,'');
   load_singings(zi.value);
 }
 
+<!-- on button press, or enter key press, submit zipcode -->
 zi.onkeypress = function(e) {
   if (e && e.keyCode == 13) {
     submit();
   }
 }
+
+<!-- button is initially disabled until json files finish loading -->
 zb.disabled = true;
 zb.onclick = function(e) { submit(); };
 function maybe_ready() {
@@ -85,10 +88,15 @@ function maybe_ready() {
     zb.disabled = false;
   }
 }
+
+
 var zips = null;
 var singing_locations = null;
+
+<!--Load json files on page load-->
 document.body.onload = function() {
   zi.focus();
+  
   fetch("zipcode.json", function(response) {
     zips = JSON.parse(response);
     maybe_ready();
@@ -108,10 +116,14 @@ function fetch(url, callback) {
   xhr.open("GET",url,true);
   xhr.send();
 }
+
+
 function clear_singings() {
   singings.innerHTML = "";
   menu.innerHTML = "";
 }
+
+<!--function to add singing event to html-->
 function add_singing(title, location, date, link, books) {
   var div = document.createElement("div");
   div.className = "singing";
@@ -123,6 +135,8 @@ function add_singing(title, location, date, link, books) {
 				  + books +'</div>';
   singings.appendChild(div);
 }
+
+<!--compute distance between two locations-->
 function distance(lat1, lon1, lat2, lon2) {
   var R = 3959; // Radius of the earth in km
   var dLat = (lat2 - lat1) * Math.PI / 180;  // deg2rad below
@@ -135,7 +149,73 @@ function distance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.asin(Math.sqrt(a));
 }
 
+
+function calc_date(month, week, offset){
+  var today = new Date();
+  var year = today.getFullYear();
+  var earliest_date = (week-1)*7;
+  var date = new Date(year, month, earliest_date);
+  date.setDate(date.getDate() + 7 - date.getDay());
+  date.setDate(date.getDate() - offset);
+  if(date < today){
+	year++;
+	date = new Date(year, month, earliest_date);
+	date.setDate(date.getDate() + 7 - date.getDay());
+	date.setDate(date.getDate() - offset);
+  }
+  return date;
+}
+
+function calc_date_local(weekday, weeks, offset){
+	var today = new Date();
+	var year = today.getFullYear();
+	var month = today.getMonth();
+	var i = 0;
+	var earliest_date = (weeks[i]-1)*7;
+	var date = new Date(year, month, earliest_date);
+	date.setDate(date.getDate() + 7 - date.getDay() + Number(weekday));
+	date.setDate(date.getDate() + offset);
+	while(date < today){
+		if(i < weeks.length-1){
+			i++;
+		}else{
+			i = 0;
+			if(month != 11){
+				month++;
+			}else{
+				month = 0;
+				year++;
+			}
+		}
+		earliest_date = (weeks[i]-1)*7;
+		date = new Date(year, month, earliest_date);
+		date.setDate(date.getDate() + 7 - date.getDay() + Number(weekday));
+		date.setDate(date.getDate() + offset);
+	}
+	console.log(date.getDay());
+	return date;
+}
+
+function week_array(week1, week2, week3){
+	var weeks = [];
+	if(week1 == "all"){
+		weeks = [1, 2, 3, 4, 5];
+	}else if(week1 == "last"){
+		weeks = [4];
+	}else if(week2.length == 0){
+		weeks = [Number(week1)];
+	}else if(week3.length == 0 || Number(week3) < 0){
+		weeks = [Number(week1), Number(week2)];
+	}else{
+		weeks = [Number(week1), Number(week2), Number(week3)];
+	}
+	return weeks;
+}
+	
+
 function load_singings(zip, minimum_singings) {
+
+	clear_singings();
 
   if (!minimum_singings) {
     minimum_singings = 3;
@@ -156,14 +236,28 @@ function load_singings(zip, minimum_singings) {
   notfound.style.display = "none";
   nosingings.style.display = "none";
   
-  clear_singings();
   
-
+  
+  
+  
   singing_timeDist = [];
   for (var i = 0 ; i < singing_locations.length ; i++) {
-	var date = new Date(singing_locations[i][4])
+	var date = new Date();
+	var offset = 0;
+	if(singing_locations[i][0] == "Local Singing"){
+		var weeks = week_array(singing_locations[i][5], singing_locations[i][6], singing_locations[i][7]);
+		if(singing_locations[i][7] != ""){
+			offset = Number(singing_locations[i][7]);
+		}else{
+			offset = 0;
+		}
+		console.log(singing_locations[i][1]);
+		date = calc_date_local(singing_locations[i][4], weeks, offset);
+	}else{
+		date = calc_date(singing_locations[i][4], singing_locations[i][5], singing_locations[i][6]);
+	}
 	var today = new Date();
-    singing_timeDist.push([date.getTime()-today.getTime(), i]);
+	singing_timeDist.push([date.getTime()-today.getTime(), i]);
   }
   singing_timeDist.sort(function(a,b){return a[0]-b[0]});
   
@@ -172,6 +266,7 @@ function load_singings(zip, minimum_singings) {
   var n = Math.min(minimum_singings, singing_locations.length);
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const weekNames = ["First", "Second", "Third", "Fourth", "Fifth"];
   const millisecondsPerMonth = 2629743830;
   for (var j = 0 ; j < singing_locations.length ; j++) {
     var t = singing_timeDist[j][0]/millisecondsPerMonth;
@@ -179,42 +274,72 @@ function load_singings(zip, minimum_singings) {
 	var d = distance(singing_locations[i][2],singing_locations[i][3], ll[0], ll[1]);
 	if(d < document.forms["menu"]["miles"].value 
 	    && t < document.forms["menu"]["months"].value 
-		&& (document.getElementById("past").checked || t>0)
 	){
-		var date = new Date(singing_locations[i][4]);
-		var endDate = new Date(date);
-		var endDateValue = endDate.getDate() + Number(singing_locations[i][5]) - 1;
-		endDate.setDate(endDateValue);
-		var dateString = monthNames[date.getMonth()] + " " + date.getDate();
-		if(singing_locations[i][5] > 1){
-			dateString = dateString.concat("-" + endDate.getDate());
+		var date = new Date();
+		var dateString = "";
+		if(singing_locations[i][0] == "Local Singing"){
+			var weeks = week_array(singing_locations[i][5], singing_locations[i][6], singing_locations[i][7]);
+			if(singing_locations[i][7] < 0){
+				offset = Number(singing_locations[i][7]);
+			}else{
+				offset = 0;
+			}
+			date = calc_date_local(singing_locations[i][4], weeks, offset);
+			dateString = monthNames[date.getMonth()] + " " + date.getDate() + ", " + date.getFullYear() + " (";
+			
+			if(singing_locations[i][7] < 0){
+				dateString = dateString.concat(dayNames[date.getDay()] + " before ");
+			}
+			if(singing_locations[i][5] == "all"){
+				dateString = dateString.concat("Every ");
+			}else if(singing_locations[i][5] == "last"){
+				dateString = dateString.concat("Last ");
+			}else{
+				dateString = dateString.concat(weekNames[Number(singing_locations[i][5])-1] + " ");
+				if(singing_locations[i][6] != ""){
+					dateString = dateString.concat("and " + weekNames[Number(singing_locations[i][6])-1] + " ");
+				}
+			}
+			dateString = dateString.concat(dayNames[Number(singing_locations[i][4])]);
+			if(singing_locations[i][5] != "all"){
+				dateString = dateString.concat("s");
+			}
+			dateString = dateString.concat(")");
+		}else{
+			date = calc_date(singing_locations[i][4], singing_locations[i][5], singing_locations[i][6]);
+			var endDate = new Date(date);
+			var endDateValue = endDate.getDate() + Number(singing_locations[i][7]) - 1;
+			endDate.setDate(endDateValue);
+			dateString = monthNames[date.getMonth()] + " " + date.getDate();
+			if(singing_locations[i][7] > 1){
+				dateString = dateString.concat("-" + endDate.getDate());
+			}
+			dateString = dateString.concat(", " + date.getFullYear() + " (" + dayNames[date.getDay()]);
+			if(singing_locations[i][7] > 1){
+				dateString = dateString.concat("-" + dayNames[endDate.getDay()]);
+			}
+			dateString = dateString.concat(")");
 		}
-		dateString = dateString.concat(", " + date.getFullYear() + " (" + dayNames[date.getDay()]);
-		if(singing_locations[i][5] > 1){
-			dateString = dateString.concat("-" + dayNames[date.getDay()]);
-		}
-		dateString = dateString.concat(")");
-		
 		var bookString = "Book";
-		if(singing_locations[i][7].length != 0){
+		if(singing_locations[i][8].length != 0){
 			bookString = bookString.concat("s: ");
 		}else{
 			bookString = bookString.concat(": ");
 		}
-		bookString = bookString.concat(singing_locations[i][6]);
-		if(singing_locations[i][7].length != 0){
+		bookString = bookString.concat(singing_locations[i][8]);
+		if(singing_locations[i][9].length != 0){
 			bookString = bookString.concat(", ");
-			bookString = bookString.concat(singing_locations[i][7]);
+			bookString = bookString.concat(singing_locations[i][9]);
 		}	
-		if(singing_locations[i][8].length != 0){
+		if(singing_locations[i][10].length != 0){
 			bookString = bookString.concat(", ");
-			bookString = bookString.concat(singing_locations[i][8]);
+			bookString = bookString.concat(singing_locations[i][10]);
 		}
 				
 		add_singing(singing_locations[i][0],
 			singing_locations[i][1],
 			dateString,
-			singing_locations[i][9],
+			singing_locations[i][11],
 			bookString);
 		added_singings += 1;
 	}
